@@ -1,16 +1,19 @@
 #Importar 
-from fastapi import FastAPI, Body, Path, Query
+from fastapi import FastAPI, Body, Path, Query, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse
 
 from pydantic import BaseModel, Field
 from typing import Optional, List
+from jwt_manager import create_token, validate_token
+from fastapi.security import HTTPBearer
+
 #Instancia
 app = FastAPI()
 app.title = 'Ejemplo FastApi'
 app.version = '0.0.1'
 
 
-#Esquema
+#Esquemas
 class Model(BaseModel):
     #nombre  tipo   si es opcional y valor por defecto
     id:       int       
@@ -31,6 +34,16 @@ class Model(BaseModel):
         }
     }
 
+class User(BaseModel):
+    email:str
+    password:str
+
+class JWTBearer(HTTPBearer):
+    async def __call__(self, request: Request):
+        auth = await super().__call__(request)
+        data = validate_token(auth.credentials)
+        if data['email'] != "kali@gmail.com":
+            raise HTTPException(status_code=403, detail="Credenciales Invalidas")
 
 movies = [ { "id" : 1,"name" : "Last OF US", "category" : "History", "year" : 2024},{ "id" : 2,"name" : "Deadpool", "category" : "History", "year" : 2025}]
 
@@ -38,7 +51,13 @@ movies = [ { "id" : 1,"name" : "Last OF US", "category" : "History", "year" : 20
 def greeting():
     return 'Hello Word'
 
-@app.get('/movies', tags=['Movies'], response_model=List[Model])
+@app.post('/login', tags=['auth'])
+def login(user:User):
+    if user.email == "kali@gmail.com" and user.password =="123":
+        token: str = create_token(user.dict())
+        return JSONResponse(content=token)
+
+@app.get('/movies', tags=['Movies'], response_model=List[Model], dependencies=[Depends(JWTBearer())])
 def all()-> List[Model]:
     return JSONResponse(content=movies)
 
